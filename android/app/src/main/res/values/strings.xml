@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DSWD Attendance Scanner 2026</string>
+    <string name="title_activity_main">DSWD Attendance Scanner 2026</string>
+    <string name="package_name">com.dswdattendance2026.app</string>
+    <string name="custom_url_scheme">com.dswdattendance2026.app</string>
+</resources>
