@@ -296,7 +296,7 @@ export default function App() {
   async function exportToCSV() {
  const now = new Date();
 const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).replace(/,/g, '');
-const filename = `City Link Attendance - ${dateStr}.csv`;
+const filename = `SFC Attendance - ${dateStr}.csv`;
 
 
   // Your data, including headers
@@ -404,7 +404,7 @@ const filename = `City Link Attendance - ${dateStr}.csv`;
       </div>
       <div className="main">
         <div className="titleHead"> 
-        <h2>📋 Sample Attendance Scanner</h2> 
+        <h2>📋 SFC Attendance Scanner</h2> 
         {syncing && <span className="spinner" style={{ marginLeft: 8 }}></span>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
