@@ -16,6 +16,8 @@
     "@capacitor/core": "^8.1.0",
     "@capacitor/filesystem": "^8.1.0",
     "@capacitor/share": "^8.0.0",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "firebase": "^12.9.0",
     "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",

@@ -197,15 +197,31 @@ button:hover {
 
 /* Column widths */
 .records-table th:nth-child(1),
-.records-table td:nth-child(1) { width: 5%; }
+.records-table td:nth-child(1) { width: 6%; }
 .records-table th:nth-child(2),
-.records-table td:nth-child(2) { width: 35%; }
+.records-table td:nth-child(2) { width: 18%; }
 .records-table th:nth-child(3),
-.records-table td:nth-child(3) { width: 25%; }
+.records-table td:nth-child(3) { width: 12%; }
 .records-table th:nth-child(4),
-.records-table td:nth-child(4) { width: 25%; }
+.records-table td:nth-child(4) { width: 13%; }
 .records-table th:nth-child(5),
-.records-table td:nth-child(5) { width: 10%; }
+.records-table td:nth-child(5) { width: 12%; }
+.records-table th:nth-child(6),
+.records-table td:nth-child(6) { width: 13%; }
+.records-table th:nth-child(7),
+.records-table td:nth-child(7) { width: 12%; }
+.records-table th:nth-child(8),
+.records-table td:nth-child(8) { width: 13%; }
+.records-table th:nth-child(9),
+.records-table td:nth-child(9) { width: 10%; }
+
+.record-photo {
+  width: 80px;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  margin: 0 auto;
+}
 
 .record-card button {
   flex-shrink: 0;

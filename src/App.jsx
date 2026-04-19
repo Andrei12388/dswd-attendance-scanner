@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Html5Qrcode } from "html5-qrcode";
+import { BrowserQRCodeReader } from "@zxing/library";
 import * as XLSX from "xlsx";
 import "./App.css";
 import { dbCloud } from "./firebase";
@@ -22,10 +23,117 @@ export default function App() {
   const [beep, setBeep] = useState(true);
   const [syncMessage, setSyncMessage] = useState("");
   const lastScanRef = useRef(0);
+  const fileInputRef = useRef(null);
+  const generalFileInputRef = useRef(null);
 
   const logStatus = (msg) => setStatusLog(prev => [msg, ...prev.slice(0, 9)]);
 
-  // ✅ Check Firebase + navigator.onLine
+  const loadFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const loadImageElement = (src) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+
+  const resizeDataUrl = async (dataUrl, maxDim = 100000) => {
+    const img = await loadImageElement(dataUrl);
+    const maxSide = Math.max(img.width, img.height);
+    if (maxSide <= maxDim) return dataUrl;
+
+    const scale = maxDim / maxSide;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/png");
+  };
+
+  const scanQrFileWithZXing = async (file) => {
+    const dataUrl = await loadFileAsDataUrl(file);
+    const smallDataUrl = await resizeDataUrl(dataUrl, 1200);
+    const reader = new BrowserQRCodeReader();
+    try {
+      try {
+        const result = await reader.decodeFromImageUrl(smallDataUrl);
+        return result?.getText ? result.getText() : result?.text || result;
+      } catch (firstError) {
+        if (smallDataUrl !== dataUrl) {
+          const fallbackResult = await reader.decodeFromImageUrl(dataUrl);
+          return fallbackResult?.getText ? fallbackResult.getText() : fallbackResult?.text || fallbackResult;
+        }
+        throw firstError;
+      }
+    } finally {
+      reader.reset();
+    }
+  };
+
+  const handleQrFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    let qr = scanner;
+    if (!qr) {
+      qr = new Html5Qrcode("reader");
+      setScanner(qr);
+    }
+
+    try {
+      const result = await qr.scanFileV2(file, true);
+      const parsed = parseScannedText(result?.decodedText || result);
+      addRecord(parsed);
+      logStatus(`✅ File scanned: ${file.name}`);
+    } catch (error) {
+      logStatus(`⚠️ html5-qrcode file scan failed, trying ZXing fallback.`);
+      try {
+        const fallbackText = await scanQrFileWithZXing(file);
+        const parsed = parseScannedText(fallbackText);
+        addRecord(parsed);
+        logStatus(`✅ ZXing file scanned: ${file.name}`);
+      } catch (fallbackError) {
+        logStatus(`❌ File scan failed: ${fallbackError?.message || fallbackError}`);
+      }
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const scanQrImage = () => {
+    if (!scanner) {
+      const qr = new Html5Qrcode("reader");
+      setScanner(qr);
+    }
+    fileInputRef.current?.click();
+  };
+
+  const scanGeneralQrImage = () => {
+    generalFileInputRef.current?.click();
+  };
+
+  const handleGeneralQrFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await scanQrFileWithZXing(file);
+      console.log("General QR scan result:", result);
+      logStatus(`📁 General file scan: ${result.substring(0, 50)}...`);
+    } catch (error) {
+      console.error("General QR scan failed:", error);
+      logStatus(`❌ General file scan failed: ${error?.message || error}`);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const checkFirebaseConnection = async () => {
     if (!selectedFile) return;
     try {
@@ -64,18 +172,48 @@ export default function App() {
   };
 
   /* ================================ ADD RECORD ================================= */
-  const addRecord = (name, hhid) => {
+  const parseScannedText = (text) => {
+    const raw = text.trim();
+    let fields = raw.includes("\t")
+      ? raw.split("\t")
+      : raw.includes("|")
+      ? raw.split("|")
+      : raw.split(",");
+
+    fields = fields.map((field) => field?.trim()).filter(Boolean);
+
+    if (fields.length >= 4) {
+      const [hhid, lastName, firstName, imageBase64, school, birthday, phone] = fields;
+      const name = [lastName, firstName].filter(Boolean).join(" ");
+      const photo = imageBase64 ? `data:image/jpeg;base64,${imageBase64}` : null;
+      return { name, hhid, photo, school, birthday, phone };
+    }
+
+    const [name, hhid] = fields;
+    return { name: name?.trim() || "", hhid: hhid?.trim() || "", photo: null, school: "", birthday: "", phone: "" };
+  };
+
+  const addRecord = (record) => {
+    const { name, hhid, photo, school, birthday, phone } = record || {};
     if (!name || !hhid) return;
     const now = Date.now();
     if (now - lastScanRef.current < 700) return; // cooldown
     lastScanRef.current = now;
 
-    setRecords(prev => {
-      if (prev.some(r => r.hhid === hhid)) {
+    setRecords((prev) => {
+      if (prev.some((r) => r.hhid === hhid)) {
         logStatus(`⚠️ Duplicate skipped: ${hhid}`);
         return prev;
       }
-      const rec = { name, hhid, time: new Date().toLocaleString() };
+      const rec = {
+        name,
+        hhid,
+        photo: photo || null,
+        school: school || "",
+        birthday: birthday || "",
+        phone: phone || "",
+        time: new Date().toLocaleString(),
+      };
       if (beep) new Audio("/beep.mp3").play().catch(() => {});
       if (vibrate && navigator.vibrate) navigator.vibrate(120);
       if (autoSync && selectedFile) saveOnlineRecord(rec);
@@ -126,8 +264,8 @@ export default function App() {
       { facingMode: "environment" },
       { fps: 10, qrbox: 250 },
       (text) => {
-        const [name, hhid] = text.split(",");
-        addRecord(name?.trim(), hhid?.trim());
+        const parsed = parseScannedText(text);
+        addRecord(parsed);
       }
     );
   };
@@ -138,9 +276,13 @@ export default function App() {
     setScanner(null);
   };
 
+  const startGeneralScanner = () => {
+    scanGeneralQrImage();
+  };
+
   /* ================================ EXPORT ================================= */
   const exportExcel = async () => {
-    const data = [["Item", "Name", "HH_ID", "Timestamp"], ...records.map((r, i) => [i + 1, r.name, r.hhid, r.time])];
+    const data = [["Item", "Name", "HH_ID", "School", "Birthday", "Phone", "Timestamp"], ...records.map((r, i) => [i + 1, r.name, r.hhid, r.school, r.birthday, r.phone, r.time])];
     const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Records");
@@ -159,8 +301,8 @@ const filename = `City Link Attendance - ${dateStr}.csv`;
 
   // Your data, including headers
   const data = [
-    ["Item", "Name", "HH_ID", "Timestamp"],
-    ...records.map((r, i) => [i + 1, r.name, r.hhid, r.time])
+    ["Item", "Name", "HH_ID", "School", "Birthday", "Phone", "Timestamp"],
+    ...records.map((r, i) => [i + 1, r.name, r.hhid, r.school, r.birthday, r.phone, r.time])
   ];
 
   // Convert array of arrays to CSV string
@@ -262,16 +404,32 @@ const filename = `City Link Attendance - ${dateStr}.csv`;
       </div>
       <div className="main">
         <div className="titleHead"> 
-        <h2>📋 DSWD City Link Attendance Scanner</h2> 
+        <h2>📋 Sample Attendance Scanner</h2> 
         {syncing && <span className="spinner" style={{ marginLeft: 8 }}></span>}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn" onClick={startScanner}>Start</button>
           <button className="btn" onClick={stopScanner}>Stop</button>
+          <button className="btn" onClick={startGeneralScanner}>Scan Any QR</button>
+          <button className="btn" onClick={scanQrImage}>Scan QR Image</button>
           <button className="btn" onClick={clearRecords}>Clear</button>
           <button className="btn" onClick={saveOnline}>Save Online</button>
           <button className="btn" onClick={exportToCSV}>Export CSV</button>
           <button className="btn" onClick={() => window.location.reload()}>Refresh</button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={handleQrFileChange}
+          />
+          <input
+            type="file"
+            ref={generalFileInputRef}
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={handleGeneralQrFileChange}
+          />
         </div>
 
         {syncMessage && (
@@ -299,8 +457,13 @@ const filename = `City Link Attendance - ${dateStr}.csv`;
     <thead>
       <tr>
         <th>Item</th>
+        <th>Photo</th>
         <th>Name</th>
-        <th>HH_ID</th>
+        <th>SFC_ID</th>
+        <th>School</th>
+        <th>Birthday</th>
+        <th>Phone</th>
+        
         <th>Timestamp</th>
         <th />
       </tr>
@@ -309,8 +472,13 @@ const filename = `City Link Attendance - ${dateStr}.csv`;
       {records.map((r, i) => (
         <tr key={r.hhid}>
           <td>{i + 1}</td>
+          <td>{r.photo ? <img src={r.photo} alt="Photo" className="record-photo" /> : "—"}</td>
           <td>{r.name}</td>
           <td>{r.hhid}</td>
+          <td>{r.school || "—"}</td>
+          <td>{r.birthday || "—"}</td>
+          <td>{r.phone || "—"}</td>
+          
           <td>{r.time}</td>
           <td>
             <button onClick={() => deleteRecord(r)}>Delete</button>
