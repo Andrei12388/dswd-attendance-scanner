@@ -190,32 +190,75 @@ export default function App() {
   };
 
   const addRecord = (record) => {
-    const { name, hhid, photo, school, birthday, phone } = record || {};
-    if (!name || !hhid) return;
-    const now = Date.now();
-    if (now - lastScanRef.current < 700) return; // cooldown
-    lastScanRef.current = now;
 
-    setRecords((prev) => {
-      if (prev.some((r) => r.hhid === hhid)) {
-        logStatus(`⚠️ Duplicate skipped: ${hhid}`);
-        return prev;
-      }
-      const rec = {
-        name,
-        hhid,
-        photo: photo || null,
-        school: school || "",
-        birthday: birthday || "",
-        phone: phone || "",
-        time: new Date().toLocaleString(),
-      };
-      if (beep) new Audio("/beep.mp3").play().catch(() => {});
-      if (vibrate && navigator.vibrate) navigator.vibrate(120);
-      if (autoSync && selectedFile) saveOnlineRecord(rec);
-      return [rec, ...prev];
-    });
-  };
+  console.log("🧾 addRecord called:", record);
+
+  const {
+    name,
+    hhid,
+    photo,
+    school,
+    birthday,
+    phone
+  } = record || {};
+
+  if (!name || !hhid) {
+
+    console.log("❌ Missing name or hhid");
+
+    return;
+  }
+
+  const now = Date.now();
+
+  if (now - lastScanRef.current < 700) {
+
+    console.log("⏱️ Skipped due to cooldown");
+
+    return;
+  }
+
+  lastScanRef.current = now;
+
+  setRecords((prev) => {
+
+    console.log("📊 Current records:", prev.length);
+
+    if (prev.some((r) => r.hhid === hhid)) {
+
+      console.log("⚠️ Duplicate skipped:", hhid);
+
+      logStatus(`⚠️ Duplicate skipped: ${hhid}`);
+
+      return prev;
+    }
+
+    const rec = {
+
+      name,
+      hhid,
+      photo: photo || null,
+      school: school || "",
+      birthday: birthday || "",
+      phone: phone || "",
+      time: new Date().toLocaleString(),
+
+    };
+
+    console.log("✅ Adding record:", rec);
+
+    if (beep)
+      new Audio("/beep.mp3").play().catch(() => {});
+
+    if (vibrate && navigator.vibrate)
+      navigator.vibrate(120);
+
+    if (autoSync && selectedFile)
+      saveOnlineRecord(rec);
+
+    return [rec, ...prev];
+  });
+};
 
   /* ================================ FIREBASE ================================= */
   const saveOnlineRecord = async (rec) => {
@@ -257,6 +300,7 @@ const videoRef = useRef(null);
 const zxingReaderRef = useRef(null);
 
 const startScanner = async () => {
+
   try {
 
     if (zxingReaderRef.current) return;
@@ -272,8 +316,7 @@ const startScanner = async () => {
 
     const videoDevices =
       devices.filter(
-        device =>
-          device.kind === "videoinput"
+        d => d.kind === "videoinput"
       );
 
     if (!videoDevices.length) {
@@ -283,18 +326,13 @@ const startScanner = async () => {
 
     }
 
-    let deviceId =
-      videoDevices[0].deviceId;
+    // Prefer back camera
+    let deviceId = videoDevices[0].deviceId;
 
     const backCam =
       videoDevices.find(d =>
-        d.label
-          .toLowerCase()
-          .includes("back") ||
-
-        d.label
-          .toLowerCase()
-          .includes("environment")
+        d.label.toLowerCase().includes("back") ||
+        d.label.toLowerCase().includes("environment")
       );
 
     if (backCam)
@@ -306,39 +344,36 @@ const startScanner = async () => {
 
       videoRef.current,
 
-      (result, err) => {
+      async (result, err) => {
 
         if (result) {
 
-          const text =
-            result.getText();
+          const text = result.getText();
 
-          // DEBUG OUTPUT
-          console.log(
-            "📷 LIVE QR:",
-            text
-          );
+          console.log("📷 LIVE QR TEXT:", text);
 
-          logStatus(
-            `📷 QR Detected`
-          );
+          logStatus("📷 QR Detected");
 
-          const now = Date.now();
+          // STOP CAMERA
+          await stopScanner();
 
-          if (
-            now - lastScanRef.current
-            < 800
-          ) return;
-
-          lastScanRef.current = now;
-
+          // PROCESS DATA (same as file scan)
           handleScanResult(text);
+
+          // RESTART CAMERA AFTER DELAY
+          setTimeout(() => {
+
+            console.log("🔄 Restarting camera...");
+
+            startScanner();
+
+          }, 1000);
+
         }
 
         if (
           err &&
-          err.name !==
-            "NotFoundException"
+          err.name !== "NotFoundException"
         ) {
 
           console.error(err);
@@ -358,6 +393,7 @@ const startScanner = async () => {
     );
 
   }
+
 };
 
 const handleScanResult = (result) => {
@@ -367,8 +403,6 @@ const handleScanResult = (result) => {
     result?.text ||
     result;
 
-  console.log("📦 handleScanResult:", text);
-
   if (!text) {
 
     logStatus("⚠️ No QR data");
@@ -376,28 +410,49 @@ const handleScanResult = (result) => {
 
   }
 
+  console.log("📦 RAW TEXT:", text);
+
   const parsed =
     parseScannedText(text);
 
   console.log("📦 Parsed:", parsed);
 
+  if (!parsed.name || !parsed.hhid) {
+
+    console.log("❌ Invalid parsed data");
+
+    logStatus("❌ Invalid QR format");
+
+    return;
+
+  }
+
   addRecord(parsed);
+
 };
 
-  const stopScanner = async () => {
+const stopScanner = async () => {
+
   try {
+
     if (zxingReaderRef.current) {
+
+      console.log("🛑 Stopping camera...");
 
       zxingReaderRef.current.reset();
 
       zxingReaderRef.current = null;
 
-      logStatus("🛑 ZXing camera stopped");
+      logStatus("🛑 Camera stopped");
+
     }
 
   } catch (err) {
+
     console.error(err);
+
   }
+
 };
 
   const startGeneralScanner = () => {
