@@ -1,0 +1,33 @@
+1) Build the web app
+From the project root:
+
+npm run build
+
+2) Sync web assets into Android
+
+npx cap sync android
+
+If you already have the Android project, sync is enough. If you want just copy assets:
+
+
+npx cap copy android
+
+3) Build the APK
+Option A — Use Android Studio
+
+npx cap open android
+
+Then in Android Studio:
+
+Build → Build Bundle(s) / APK(s) → Build APK(s)
+Option B — Use Gradle on Windows
+From the project root:
+
+
+cd android.\gradlew.bat assembleDebug
+For a release APK:
+
+
+.\gradlew.bat assembleRelease
+4) Find the generated APK
+Debug APK:

@@ -77,42 +77,38 @@ export default function App() {
   };
 
   const handleQrFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const file = event.target.files?.[0];
+  if (!file) return;
 
-    let qr = scanner;
-    if (!qr) {
-      qr = new Html5Qrcode("reader");
-      setScanner(qr);
-    }
+  try {
+    logStatus(`📁 Scanning file: ${file.name}`);
 
-    try {
-      const result = await qr.scanFileV2(file, true);
-      const parsed = parseScannedText(result?.decodedText || result);
-      addRecord(parsed);
-      logStatus(`✅ File scanned: ${file.name}`);
-    } catch (error) {
-      logStatus(`⚠️ html5-qrcode file scan failed, trying ZXing fallback.`);
-      try {
-        const fallbackText = await scanQrFileWithZXing(file);
-        const parsed = parseScannedText(fallbackText);
-        addRecord(parsed);
-        logStatus(`✅ ZXing file scanned: ${file.name}`);
-      } catch (fallbackError) {
-        logStatus(`❌ File scan failed: ${fallbackError?.message || fallbackError}`);
-      }
-    } finally {
-      event.target.value = "";
-    }
-  };
+    const text = await scanQrFileWithZXing(file);
+
+    console.log("📷 File QR text:", text); // DEBUG
+
+    handleScanResult(text);
+
+    logStatus(`✅ File scanned: ${file.name}`);
+
+  } catch (error) {
+
+    console.error("❌ File scan error:", error);
+
+    logStatus(
+      `❌ File scan failed: ${
+        error?.message || error
+      }`
+    );
+
+  } finally {
+    event.target.value = "";
+  }
+};
 
   const scanQrImage = () => {
-    if (!scanner) {
-      const qr = new Html5Qrcode("reader");
-      setScanner(qr);
-    }
-    fileInputRef.current?.click();
-  };
+  fileInputRef.current?.click();
+};
 
   const scanGeneralQrImage = () => {
     generalFileInputRef.current?.click();
@@ -256,25 +252,153 @@ export default function App() {
   };
 
   /* ================================ SCANNER ================================= */
-  const startScanner = () => {
-    if (scanner) return;
-    const qr = new Html5Qrcode("reader");
-    setScanner(qr);
-    qr.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 250 },
-      (text) => {
-        const parsed = parseScannedText(text);
-        addRecord(parsed);
+
+const videoRef = useRef(null);
+const zxingReaderRef = useRef(null);
+
+const startScanner = async () => {
+  try {
+
+    if (zxingReaderRef.current) return;
+
+    logStatus("📷 Starting ZXing camera...");
+
+    const reader = new BrowserQRCodeReader();
+
+    zxingReaderRef.current = reader;
+
+    const devices =
+      await navigator.mediaDevices.enumerateDevices();
+
+    const videoDevices =
+      devices.filter(
+        device =>
+          device.kind === "videoinput"
+      );
+
+    if (!videoDevices.length) {
+
+      logStatus("❌ No camera found.");
+      return;
+
+    }
+
+    let deviceId =
+      videoDevices[0].deviceId;
+
+    const backCam =
+      videoDevices.find(d =>
+        d.label
+          .toLowerCase()
+          .includes("back") ||
+
+        d.label
+          .toLowerCase()
+          .includes("environment")
+      );
+
+    if (backCam)
+      deviceId = backCam.deviceId;
+
+    await reader.decodeFromVideoDevice(
+
+      deviceId,
+
+      videoRef.current,
+
+      (result, err) => {
+
+        if (result) {
+
+          const text =
+            result.getText();
+
+          // DEBUG OUTPUT
+          console.log(
+            "📷 LIVE QR:",
+            text
+          );
+
+          logStatus(
+            `📷 QR Detected`
+          );
+
+          const now = Date.now();
+
+          if (
+            now - lastScanRef.current
+            < 800
+          ) return;
+
+          lastScanRef.current = now;
+
+          handleScanResult(text);
+        }
+
+        if (
+          err &&
+          err.name !==
+            "NotFoundException"
+        ) {
+
+          console.error(err);
+
+        }
+
       }
+
     );
-  };
+
+  } catch (err) {
+
+    console.error(err);
+
+    logStatus(
+      `❌ ZXing camera start failed: ${err.message}`
+    );
+
+  }
+};
+
+const handleScanResult = (result) => {
+
+  const text =
+    result?.decodedText ||
+    result?.text ||
+    result;
+
+  console.log("📦 handleScanResult:", text);
+
+  if (!text) {
+
+    logStatus("⚠️ No QR data");
+    return;
+
+  }
+
+  const parsed =
+    parseScannedText(text);
+
+  console.log("📦 Parsed:", parsed);
+
+  addRecord(parsed);
+};
 
   const stopScanner = async () => {
-    if (!scanner) return;
-    await scanner.stop();
-    setScanner(null);
-  };
+  try {
+    if (zxingReaderRef.current) {
+
+      zxingReaderRef.current.reset();
+
+      zxingReaderRef.current = null;
+
+      logStatus("🛑 ZXing camera stopped");
+    }
+
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   const startGeneralScanner = () => {
     scanGeneralQrImage();
@@ -450,7 +574,14 @@ const filename = `SFC Attendance - ${dateStr}.csv`;
         <h3>Status Log</h3>
         <div className="status-box">{statusLog.map((s, i) => <div key={i}>{s}</div>)}</div>
 
-        <div id="reader" />
+        <video
+  ref={videoRef}
+  style={{
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 10
+  }}
+/>
 
        <div className="records-table-container">
   <table className="records-table">
