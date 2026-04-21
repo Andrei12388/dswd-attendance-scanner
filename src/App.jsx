@@ -205,8 +205,8 @@ export default function App() {
   if (!name || !hhid) {
 
     console.log("❌ Missing name or hhid");
-
     return;
+
   }
 
   const now = Date.now();
@@ -214,8 +214,8 @@ export default function App() {
   if (now - lastScanRef.current < 700) {
 
     console.log("⏱️ Skipped due to cooldown");
-
     return;
+
   }
 
   lastScanRef.current = now;
@@ -224,15 +224,31 @@ export default function App() {
 
     console.log("📊 Current records:", prev.length);
 
-    if (prev.some((r) => r.hhid === hhid)) {
+    const isDuplicate =
+      prev.some((r) => r.hhid === hhid);
+
+    /* 🔔 ALWAYS BEEP + VIBRATE */
+    if (beep)
+      new Audio("/beep.mp3")
+        .play()
+        .catch(() => {});
+
+    if (vibrate && navigator.vibrate)
+      navigator.vibrate(120);
+
+    /* ⚠️ DUPLICATE */
+    if (isDuplicate) {
 
       console.log("⚠️ Duplicate skipped:", hhid);
 
-      logStatus(`⚠️ Duplicate skipped: ${hhid}`);
+      logStatus(
+        `⚠️ Duplicate skipped: ${hhid}`
+      );
 
       return prev;
     }
 
+    /* ✅ NEW RECORD */
     const rec = {
 
       name,
@@ -247,17 +263,13 @@ export default function App() {
 
     console.log("✅ Adding record:", rec);
 
-    if (beep)
-      new Audio("/beep.mp3").play().catch(() => {});
-
-    if (vibrate && navigator.vibrate)
-      navigator.vibrate(120);
-
     if (autoSync && selectedFile)
       saveOnlineRecord(rec);
 
     return [rec, ...prev];
+
   });
+
 };
 
   /* ================================ FIREBASE ================================= */
@@ -580,6 +592,15 @@ const filename = `SFC Attendance - ${dateStr}.csv`;
         <label>
           <input type="checkbox" checked={beep} onChange={e => setBeep(e.target.checked)} /> Beep
         </label>
+         <video
+  ref={videoRef}
+  style={{
+    width: "100%",
+    maxWidth: 400,
+    marginTop: 15,
+    borderRadius: 10
+  }}
+/>
       </div>
       <div className="main">
         <div className="titleHead"> 
@@ -626,18 +647,6 @@ const filename = `SFC Attendance - ${dateStr}.csv`;
           </div>
         )}
 
-        <h3>Status Log</h3>
-        <div className="status-box">{statusLog.map((s, i) => <div key={i}>{s}</div>)}</div>
-
-        <video
-  ref={videoRef}
-  style={{
-    width: "100%",
-    maxWidth: 400,
-    borderRadius: 10
-  }}
-/>
-
        <div className="records-table-container">
   <table className="records-table">
     <thead>
@@ -674,6 +683,8 @@ const filename = `SFC Attendance - ${dateStr}.csv`;
     </tbody>
   </table>
 </div>
+  <h3>Status Log</h3>
+        <div className="status-box">{statusLog.map((s, i) => <div key={i}>{s}</div>)}</div>
 
       </div>
     </div>
