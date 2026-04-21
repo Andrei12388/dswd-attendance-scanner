@@ -355,6 +355,7 @@ const startScanner = async () => {
       deviceId,
 
       videoRef.current,
+      
 
       async (result, err) => {
 
@@ -392,7 +393,14 @@ const startScanner = async () => {
 
         }
 
-      }
+      },
+      {
+    video: {
+      width: { ideal: 1920 },
+    height: { ideal: 1080 },
+      facingMode: "environment"
+    }
+  }
 
     );
 
@@ -592,15 +600,22 @@ const filename = `SFC Attendance - ${dateStr}.csv`;
         <label>
           <input type="checkbox" checked={beep} onChange={e => setBeep(e.target.checked)} /> Beep
         </label>
-         <video
+         <div style={{ position: "relative" }}>
+
+  <video
   ref={videoRef}
   style={{
     width: "100%",
-    maxWidth: 400,
     marginTop: 15,
-    borderRadius: 10
+    maxWidth: 700,
+    aspectRatio: "1 / 1",
+    objectFit: "cover",
+    borderRadius: 12
   }}
 />
+
+
+</div>
       </div>
       <div className="main">
         <div className="titleHead"> 
